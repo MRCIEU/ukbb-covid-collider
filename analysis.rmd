@@ -1,0 +1,27 @@
+
+summary(glm(tested ~ age + sex + age * sex, data=dat, family="binomial"))
+
+summary(lm(age ~ sex, dat))
+summary(lm(age ~ sex, dat, subset=dat$tested==1))
+
+
+summary(lm(age ~ bmi, dat))
+summary(lm(age ~ bmi, dat, subset=dat$tested==1))
+
+
+mod <- glm(tested ~ age + sex + age * sex, data=dat, family="binomial")
+f <- predict(mod, type="response")
+f <- fitted.values(mod)
+summary(f)
+
+summary(lm(age ~ sex, dat, weight=1/f, subset=tested==1))
+summary(lm(age ~ sex, dat, subset=tested==1))
+summary(lm(age ~ sex, dat))
+
+
+
+
+
+
+
+
