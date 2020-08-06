@@ -12,16 +12,17 @@ suppressMessages(suppressPackageStartupMessages({
 }))
 ```
 
-This document provides a set of analyses to illustrate collider bias induced by non-random testing of Covid-19 status amongst the UK Biobank participants, and some approaches to adjust for the bias. The methods are described in further detail in @griffith2020.
+This document provides a set of analyses to illustrate collider bias induced by non-random testing of Covid-19 status amongst the UK Biobank participants, and some approaches to adjust for the bias. The methods are described in further detail in @Griffith2020.05.04.20090506.
 
 The following variables from the [UK biobank phenotype data](http://biobank.ctsu.ox.ac.uk/crystal/) are used:
 
 - `34-0.0` - Year of birth (converted into age for this analysis)
 - `31-0.0` - Sex (male = 1, female = 0)
+- `23104-0.0` - Body mass index (BMI)
 
 Also, the linked Covid-19 freeze from `2020-06-05` is used to identify which individuals have been tested.
 
-The analysis that follows will look at simple associations between age and sex in the entire UK Biobank sample, contrasted against their associations amongst individuals selected to be tested.
+The analysis that follows will look at simple associations between age, sex and BMI in the entire UK Biobank sample, contrasted against their associations amongst individuals selected to be tested.
 
 
 ## Read in the data
@@ -47,7 +48,7 @@ table(dat$tested)
 
 ## Factors infuencing being tested
 
-Age and sex and BMI all strongly influence the likelihood of being tested:
+Age, sex and BMI all strongly influence the likelihood of being tested:
 
 ```{r}
 summary(glm(tested ~ age + sex + bmi, data=dat, family="binomial"))
@@ -124,9 +125,9 @@ create_row <- function(mod, what)
 	)
 }
 rbind(
-	create_row(mod=mod1, what="Full sample"),
+	create_row(mod=mod1, what="Full UK Biobank sample"),
 	create_row(mod=mod2, what="Tested subset"),
-	create_row(mod=mod6, what="Weighted")
+	create_row(mod=mod6, what="Weighted tested subset")
 )
 ```
 
@@ -137,14 +138,14 @@ mod7 <- glm(tested ~ bmi + sex, data=dat, family="binomial")
 coefficients(summary(mod7)) %>% kable
 ```
 
-Here we see that age, sex and the interaction each influence the chance of being tested quite strongly. We can generate the probabilities of each individual being tested based on these variables using:
+Here we see that BMI and sex influence the chance of being tested quite strongly. We can generate the probabilities of each individual being tested based on these variables using:
 
 ```{r}
 prs <- fitted.values(mod7)
 hist(prs)
 ```
 
-Now re-estimate the age-sex association with weights
+Now re-estimate the BMI-sex association with in a weighted regression, using the inverse of the `prs` variable as the weights:
 
 ```{r}
 mod8 <- summary(lm(bmi ~ sex, dat, weight=1/prs, subset=tested==1))
@@ -155,9 +156,9 @@ Comparisons:
 
 ```{r}
 rbind(
-	create_row(mod=mod3, what="Full sample"),
+	create_row(mod=mod3, what="Full UK Biobank sample"),
 	create_row(mod=mod4, what="Tested subset"),
-	create_row(mod=mod8, what="Weighted")
+	create_row(mod=mod8, what="Weighted tested subset")
 )
 ```
 
@@ -165,7 +166,9 @@ rbind(
 
 The age-sex and BMI-sex associations are distorted within the samples tested for covid, likely because these variables influence inclusion into the sample. We show that inverse probability weighting the individuals in the sample based on the variables that influence inclusion can help to reduce the collider bias. 
 
-Including the interaction term between age and sex when generating the probabilities is important, and this can be easily overlooked.
+Including the interaction term between age and sex when generating the probabilities is important [@Groenwold2020, and this can be easily overlooked.
 
 For age and sex it is implausible that unknown factors confound the age-tested or sex-tested relationships. If such factors existed, the model generating the weights would be required to include their effects also. For the BMI-tested relationship this is more plausible. We show here that the original BMI-sex association was recapitulated using simple weights constructed from only the BMI and sex variables, but if that were not the case it might be required that further variables are included in the model that could be confounding the BMI-tested relationship.
 
+
+## References
