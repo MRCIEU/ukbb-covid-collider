@@ -19,5 +19,7 @@ head(covid$eid)
 dat <- tibble(eid=age$eid, age=age$age, sex=sex$sex, bmi=bmi$bmi, tested=eid %in% covid$eid %>% as.numeric)
 table(dat$tested)
 
+dat <- subset(dat, select=-c(eid))
+
 save(dat, file="data/dat.rdata")
 

@@ -1,27 +1,171 @@
+---
+title: UK Biobank example of collider bias in Covid-19 test data
+author: Gibran Hemani
+bibliography: library.bib
+---
 
-summary(glm(tested ~ age + sex + age * sex, data=dat, family="binomial"))
+```{r}
+suppressMessages(suppressPackageStartupMessages({
+	library(knitr)
+	library(dplyr)
+	library(ggplot2)
+}))
+```
 
-summary(lm(age ~ sex, dat))
-summary(lm(age ~ sex, dat, subset=dat$tested==1))
+This document provides a set of analyses to illustrate collider bias induced by non-random testing of Covid-19 status amongst the UK Biobank participants, and some approaches to adjust for the bias. The methods are described in further detail in @griffith2020.
 
+The following variables from the [UK biobank phenotype data](http://biobank.ctsu.ox.ac.uk/crystal/) are used:
 
-summary(lm(age ~ bmi, dat))
-summary(lm(age ~ bmi, dat, subset=dat$tested==1))
+- `34-0.0` - Year of birth (converted into age for this analysis)
+- `31-0.0` - Sex (male = 1, female = 0)
 
+Also, the linked Covid-19 freeze from `2020-06-05` is used to identify which individuals have been tested.
 
-mod <- glm(tested ~ age + sex + age * sex, data=dat, family="binomial")
-f <- predict(mod, type="response")
-f <- fitted.values(mod)
-summary(f)
-
-summary(lm(age ~ sex, dat, weight=1/f, subset=tested==1))
-summary(lm(age ~ sex, dat, subset=tested==1))
-summary(lm(age ~ sex, dat))
-
-
+The analysis that follows will look at simple associations between age and sex in the entire UK Biobank sample, contrasted against their associations amongst individuals selected to be tested.
 
 
+## Read in the data
+
+```{r}
+load("data/dat.rdata")
+dat <- dat[complete.cases(dat), ]
+str(dat)
+```
+
+Summaries:
+
+```{r}
+hist(dat$age)
+table(dat$sex) / nrow(dat)
+```
+
+How many individuals tested:
+
+```{r}
+table(dat$tested)
+```
+
+## Factors infuencing being tested
+
+Age and sex and BMI all strongly influence the likelihood of being tested:
+
+```{r}
+summary(glm(tested ~ age + sex + bmi, data=dat, family="binomial"))
+```
+
+Hence we would expect the relationships between these variables to be skewed within the tested sample. For example, this is the relationship between age and sex in the total sample
+
+```{r}
+mod1 <- summary(lm(age ~ sex, dat))
+coefficients(mod1) %>% kable
+```
+
+And here it is amongst only those tested:
+
+```{r}
+mod2 <- summary(lm(age ~ sex, dat, subset=dat$tested==1))
+coefficients(mod2) %>% kable
+```
+
+Note that the association is around **`r round(coefficients(mod2)[2,1] / coefficients(mod1)[2,1])` times larger** in the tested subset.
+
+Similarly, this is the overall association between age and BMI:
+
+```{r}
+mod3 <- summary(lm(bmi ~ sex, dat))
+coefficients(mod3) %>% kable
+```
+
+and here in the subsample:
+
+```{r}
+mod4 <- summary(lm(bmi ~ sex, dat, subset=dat$tested==1))
+coefficients(mod4) %>% kable
+```
+
+where the association almost halves.
 
 
+## Inverse probability weighting
 
+If the tested individuals are a subset of the entire sample, then it is possible to generate probabilities for individuals being included in the tested subsample based on the colliding variables. The inverse of these probabilities can be used to weight the association estimate towards being representative of the overall sample.
+
+### Age and sex
+
+```{r}
+mod5 <- glm(tested ~ age + sex + age * sex, data=dat, family="binomial")
+coefficients(summary(mod5)) %>% kable
+```
+
+Here we see that age, sex and the interaction each influence the chance of being tested quite strongly. We can generate the probabilities of each individual being tested based on these variables using:
+
+```{r}
+prs <- fitted.values(mod5)
+hist(prs)
+```
+
+Now re-estimate the age-sex association with weights
+
+```{r}
+mod6 <- summary(lm(age ~ sex, dat, weight=1/prs, subset=tested==1))
+coefficients(mod6) %>% kable
+```
+
+Comparisons:
+
+```{r}
+create_row <- function(mod, what)
+{
+	tibble(
+		what=what,
+		beta=mod$coefficients[2,1],
+		lci=beta - mod$coefficients[2,2] * 1.96,
+		uci=beta + mod$coefficients[2,2] * 1.96,
+	)
+}
+rbind(
+	create_row(mod=mod1, what="Full sample"),
+	create_row(mod=mod2, what="Tested subset"),
+	create_row(mod=mod6, what="Weighted")
+)
+```
+
+### Sex and BMI
+
+```{r}
+mod7 <- glm(tested ~ bmi + sex, data=dat, family="binomial")
+coefficients(summary(mod7)) %>% kable
+```
+
+Here we see that age, sex and the interaction each influence the chance of being tested quite strongly. We can generate the probabilities of each individual being tested based on these variables using:
+
+```{r}
+prs <- fitted.values(mod7)
+hist(prs)
+```
+
+Now re-estimate the age-sex association with weights
+
+```{r}
+mod8 <- summary(lm(bmi ~ sex, dat, weight=1/prs, subset=tested==1))
+coefficients(mod8) %>% kable
+```
+
+Comparisons:
+
+```{r}
+rbind(
+	create_row(mod=mod3, what="Full sample"),
+	create_row(mod=mod4, what="Tested subset"),
+	create_row(mod=mod8, what="Weighted")
+)
+```
+
+### Summary
+
+The age-sex and BMI-sex associations are distorted within the samples tested for covid, likely because these variables influence inclusion into the sample. We show that inverse probability weighting the individuals in the sample based on the variables that influence inclusion can help to reduce the collider bias. 
+
+Including the interaction term between age and sex when generating the probabilities is important, and this can be easily overlooked.
+
+For age and sex it is implausible that unknown factors confound the age-tested or sex-tested relationships. If such factors existed, the model generating the weights would be required to include their effects also. For the BMI-tested relationship this is more plausible. We show here that the original BMI-sex association was recapitulated using simple weights constructed from only the BMI and sex variables, but if that were not the case it might be required that further variables are included in the model that could be confounding the BMI-tested relationship.
 
