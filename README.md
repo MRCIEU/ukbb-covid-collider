@@ -13,3 +13,7 @@ To run the snakemake pipeline, which produces the `analysis.html` file, first cr
 }
 ```
 
+
+## Info
+
+IEU project portal: https://ieuportal.epi.bris.ac.uk/project_detail/29352005-dde2-47c1-b9af-47c513987078/

@@ -46,8 +46,7 @@ How many individuals tested:
 table(dat$tested)
 ```
 
-## Factors infuencing being tested
-
+## Illustration of collider bias
 Age, sex and BMI all strongly influence the likelihood of being tested:
 
 ```{r}
@@ -87,29 +86,60 @@ coefficients(mod4) %>% kable
 where the association almost halves.
 
 
-## Inverse probability weighting
+## Inverse probability weights
 
 If the tested individuals are a subset of the entire sample, then it is possible to generate probabilities for individuals being included in the tested subsample based on the colliding variables. The inverse of these probabilities can be used to weight the association estimate towards being representative of the overall sample.
 
-### Age and sex
+First find which variables associate with being tested. Begin with marginal effects
 
 ```{r}
-mod5 <- glm(tested ~ age + sex + age * sex, data=dat, family="binomial")
+mod5 <- glm(tested ~ age + sex + bmi, data=dat, family="binomial")
 coefficients(summary(mod5)) %>% kable
 ```
 
-Here we see that age, sex and the interaction each influence the chance of being tested quite strongly. We can generate the probabilities of each individual being tested based on these variables using:
+It's important to also test for interactions between variables [@Groenwold2020].
 
 ```{r}
-prs <- fitted.values(mod5)
+mod6 <- glm(tested ~ bmi + age + sex + bmi * age + bmi * sex + age * sex, data=dat, family="binomial")
+coefficients(summary(mod6)) %>% kable
+```
+
+Curiously the marginal BMI effect appears to be captured by interaction terms only. Centering the marginal variables may be more appropriate when estimating interactions
+
+```{r}
+dat$bmixage <- scale(dat$bmi) * scale(dat$age)
+dat$bmixsex <- scale(dat$bmi) * scale(dat$sex)
+dat$agexsex <- scale(dat$age) * scale(dat$sex)
+mod7 <- glm(tested ~ bmi + age + sex + bmixage + bmixsex + agexsex, data=dat, family="binomial")
+coefficients(summary(mod7)) %>% kable
+```
+
+Here the marginal effects are all retained. The `bmi x sex` interaction doesn't associate strongly, so the final weighting model can be written as:
+
+```{r}
+dat$bmixage <- scale(dat$bmi) * scale(dat$age)
+dat$bmixsex <- scale(dat$bmi) * scale(dat$sex)
+dat$agexsex <- scale(dat$age) * scale(dat$sex)
+mod8 <- glm(tested ~ bmi + age + sex + bmixage + agexsex, data=dat, family="binomial")
+coefficients(summary(mod8)) %>% kable
+```
+
+We can generate the probabilities of each individual being tested based on these variables using:
+
+```{r}
+prs <- fitted.values(mod8)
 hist(prs)
 ```
 
-Now re-estimate the age-sex association with weights
+
+### Re-analysis of age and sex
+
+
+Re-estimate the age-sex association with weights
 
 ```{r}
-mod6 <- summary(lm(age ~ sex, dat, weight=1/prs, subset=tested==1))
-coefficients(mod6) %>% kable
+mod9 <- summary(lm(age ~ sex, dat, weight=1/prs, subset=tested==1))
+coefficients(mod9) %>% kable
 ```
 
 Comparisons:
@@ -127,29 +157,18 @@ create_row <- function(mod, what)
 rbind(
 	create_row(mod=mod1, what="Full UK Biobank sample"),
 	create_row(mod=mod2, what="Tested subset"),
-	create_row(mod=mod6, what="Weighted tested subset")
+	create_row(mod=mod9, what="Weighted tested subset")
 )
 ```
 
 ### Sex and BMI
 
-```{r}
-mod7 <- glm(tested ~ bmi + sex, data=dat, family="binomial")
-coefficients(summary(mod7)) %>% kable
-```
-
-Here we see that BMI and sex influence the chance of being tested quite strongly. We can generate the probabilities of each individual being tested based on these variables using:
-
-```{r}
-prs <- fitted.values(mod7)
-hist(prs)
-```
 
 Now re-estimate the BMI-sex association with in a weighted regression, using the inverse of the `prs` variable as the weights:
 
 ```{r}
-mod8 <- summary(lm(bmi ~ sex, dat, weight=1/prs, subset=tested==1))
-coefficients(mod8) %>% kable
+mod11 <- summary(lm(bmi ~ sex, dat, weight=1/prs, subset=tested==1))
+coefficients(mod11) %>% kable
 ```
 
 Comparisons:
@@ -158,7 +177,7 @@ Comparisons:
 rbind(
 	create_row(mod=mod3, what="Full UK Biobank sample"),
 	create_row(mod=mod4, what="Tested subset"),
-	create_row(mod=mod8, what="Weighted tested subset")
+	create_row(mod=mod11, what="Weighted tested subset")
 )
 ```
 
@@ -166,7 +185,7 @@ rbind(
 
 The age-sex and BMI-sex associations are distorted within the samples tested for covid, likely because these variables influence inclusion into the sample. We show that inverse probability weighting the individuals in the sample based on the variables that influence inclusion can help to reduce the collider bias. 
 
-Including the interaction term between age and sex when generating the probabilities is important [@Groenwold2020, and this can be easily overlooked.
+Including the interaction term between age and sex when generating the probabilities is important [@Groenwold2020], and this can be easily overlooked.
 
 For age and sex it is implausible that unknown factors confound the age-tested or sex-tested relationships. If such factors existed, the model generating the weights would be required to include their effects also. For the BMI-tested relationship this is more plausible. We show here that the original BMI-sex association was recapitulated using simple weights constructed from only the BMI and sex variables, but if that were not the case it might be required that further variables are included in the model that could be confounding the BMI-tested relationship.
 
