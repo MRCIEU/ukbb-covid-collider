@@ -1,6 +1,5 @@
 ---
 title: UK Biobank example of collider bias in Covid-19 test data
-author: Gibran Hemani
 bibliography: library.bib
 ---
 
@@ -12,7 +11,11 @@ suppressMessages(suppressPackageStartupMessages({
 }))
 ```
 
-This document provides a set of analyses to illustrate collider bias induced by non-random testing of Covid-19 status amongst the UK Biobank participants, and some approaches to adjust for the bias. The methods are described in further detail in @Griffith2020.05.04.20090506.
+This document is hosted at https://github.com/MRCIEU/ukbb-covid-collider.
+
+---
+
+Here we show a set of analyses to illustrate collider bias induced by non-random testing of Covid-19 status amongst the UK Biobank participants, and some approaches to adjust for the bias. The methods are described in further detail in @Griffith2020.05.04.20090506.
 
 The following variables from the [UK biobank phenotype data](http://biobank.ctsu.ox.ac.uk/crystal/) are used:
 
@@ -128,7 +131,14 @@ We can generate the probabilities of each individual being tested based on these
 
 ```{r}
 prs <- fitted.values(mod8)
-hist(prs)
+hist(prs, breaks=100)
+```
+
+The probabilities are largely clustered close to zero, so when using the inverse of these probabilities for weights there can be potential instability that comes from dividing by small numbers. Stabilising the weight, by multiplying by the probability of being tested, can avoid this issue [@Sayon-Orea2020].
+
+```{r}
+p_tested <- sum(dat$tested) / nrow(dat)
+weight <- p_tested / prs
 ```
 
 
@@ -138,7 +148,7 @@ hist(prs)
 Re-estimate the age-sex association with weights
 
 ```{r}
-mod9 <- summary(lm(age ~ sex, dat, weight=1/prs, subset=tested==1))
+mod9 <- summary(lm(age ~ sex, dat, weight=weight, subset=tested==1))
 coefficients(mod9) %>% kable
 ```
 
@@ -158,7 +168,7 @@ rbind(
 	create_row(mod=mod1, what="Full UK Biobank sample"),
 	create_row(mod=mod2, what="Tested subset"),
 	create_row(mod=mod9, what="Weighted tested subset")
-)
+) %>% kable
 ```
 
 ### Sex and BMI
@@ -167,7 +177,7 @@ rbind(
 Now re-estimate the BMI-sex association with in a weighted regression, using the inverse of the `prs` variable as the weights:
 
 ```{r}
-mod11 <- summary(lm(bmi ~ sex, dat, weight=1/prs, subset=tested==1))
+mod11 <- summary(lm(bmi ~ sex, dat, weight=weight, subset=tested==1))
 coefficients(mod11) %>% kable
 ```
 
@@ -178,7 +188,7 @@ rbind(
 	create_row(mod=mod3, what="Full UK Biobank sample"),
 	create_row(mod=mod4, what="Tested subset"),
 	create_row(mod=mod11, what="Weighted tested subset")
-)
+) %>% kable
 ```
 
 ### Summary
