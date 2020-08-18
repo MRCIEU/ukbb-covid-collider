@@ -1,10 +1,10 @@
 import os
-
+os.makedirs("docs", exist_ok=True)
 os.makedirs('data', exist_ok=True)
 
 rule all:
 	input:
-		"analysis.html"
+		"docs/index.html"
 
 rule extract:
 	output:
@@ -22,8 +22,9 @@ rule organise:
 
 rule analysis:
 	input:
-		"data/dat.rdata"
+		"data/dat.rdata",
+		"analysis.rmd"
 	output:
-		"analysis.html"
+		"docs/index.html"
 	shell:
-		"Rscript -e 'rmarkdown::render(\"analysis.rmd\")'"
+		"Rscript -e 'rmarkdown::render(\"analysis.rmd\", output_dir=\"docs\", output_file=\"index.html\")'"

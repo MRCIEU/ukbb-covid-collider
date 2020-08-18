@@ -1,20 +1,19 @@
 ---
 title: UK Biobank example of collider bias in Covid-19 test data
 bibliography: library.bib
+output:
+  html_document:
+    toc: true
+    toc_float: true
 ---
 
-```{r}
-suppressMessages(suppressPackageStartupMessages({
-	library(knitr)
-	library(dplyr)
-	library(ggplot2)
-  library(bootsens)
-}))
-```
+## About this document
 
-This document is hosted at https://github.com/MRCIEU/ukbb-covid-collider.
+This document forms part of the analysis used in the paper:
 
----
+**Collider bias undermines our understanding of COVID-19 disease risk and severity**. Gareth Griffith, Tim T Morris, Matt Tudball, Annie Herbert, Giulia Mancano, Lindsey Pike, Gemma C Sharp, Tom M Palmer, George Davey Smith, Kate Tilling, Luisa Zuccolo, Neil M Davies, Gibran Hemani
+
+It is hosted at https://github.com/MRCIEU/ukbb-covid-collider.
 
 Here we show a set of analyses to illustrate collider bias induced by non-random testing of Covid-19 status amongst the UK Biobank participants, and some approaches to adjust for the bias. The methods are described in further detail in @Griffith2020.05.04.20090506.
 
@@ -32,7 +31,18 @@ The analysis that follows will look at simple associations between age, sex and 
 ## Read in the data
 
 ```{r}
-load("X:/working/data/dat.rdata")
+suppressMessages(suppressPackageStartupMessages({
+  library(knitr)
+  library(dplyr)
+  library(ggplot2)
+  library(bootsens)
+}))
+
+knitr::opts_chunk$set(warning=FALSE, message=FALSE, echo=TRUE, cache=TRUE)
+```
+
+```{r}
+load("data/dat.rdata")
 dat <- dat[complete.cases(dat), ]
 str(dat)
 ```
@@ -51,6 +61,7 @@ table(dat$tested)
 ```
 
 ## Illustration of collider bias
+
 Age, sex and BMI all strongly influence the likelihood of being tested:
 
 ```{r}
@@ -89,7 +100,7 @@ coefficients(mod4) %>% kable
 
 where the association almost halves.
 
-## Inverse probability weights
+## Inverse probability weights in a nested sample
 
 If the tested individuals are a subset of the entire sample, then it is possible to generate probabilities for individuals being included in the tested subsample based on the colliding variables. The inverse of these probabilities can be used to weight the association estimate towards being representative of the overall sample.
 
@@ -162,7 +173,8 @@ ipw2 <- ifelse(dat$tested==1, p/prs2, (1-p)/prs2)
 ipw3 <- ifelse(dat$tested==1, p/prs3, (1-p)/prs3)
 ```
 
-# Comparison of full sample, unweighted and weighted estimates
+## Comparison of full sample, unweighted and weighted estimates
+
 ```{r models, include=F}
 # Prepare output file
 group <- expand.grid(c("as","ab","bs"),c(1,2,3,4,5))
@@ -245,26 +257,30 @@ out[out$assoc=="ab"&out$model==3,"beta"] <- coefficients(mod5)["age","Estimate"]
 out[out$assoc=="ab"&out$model==3,"se"] <- coefficients(mod5)["age","Std. Error"]
 ```
 
-## Age and sex association
+### Age and sex association
+
 ```{r age_sex}
 ggplot() + geom_errorbar(data=out[out$assoc=="as",], mapping=aes(x=as.factor(model), ymin=beta-1.96*se,    ymax=beta+1.96*se), width=0.1, size=1, color="#00BFC4") + 
 geom_point(data=out[out$assoc=="as",], mapping=aes(x=as.factor(model), y=beta), size=3, shape=21, fill="#00BFC4") + scale_x_discrete(labels=c("Linear / no interactions", "Linear / interactions",  "Nonlinear / interactions", "Unweighted", "Full sample")) + xlab("") + ylab("Value of association")
 ```
 
-## BMI and sex association
+### BMI and sex association
+
 ```{r bmi_sex}
 ggplot() + geom_errorbar(data=out[out$assoc=="bs",], mapping=aes(x=as.factor(model), ymin=beta-1.96*se,    ymax=beta+1.96*se), width=0.1, size=1, color="#00BFC4") + 
 geom_point(data=out[out$assoc=="bs",], mapping=aes(x=as.factor(model), y=beta), size=3, shape=21, fill="#00BFC4") + scale_x_discrete(labels=c("Linear / no interactions", "Linear / interactions",  "Nonlinear / interactions", "Unweighted", "Full sample")) + xlab("") + ylab("Value of association")
 ```
 
-## BMI and age association
+### BMI and age association
+
 ```{r bmi_age}
 ggplot() + geom_errorbar(data=out[out$assoc=="ab",], mapping=aes(x=as.factor(model), ymin=beta-1.96*se,    ymax=beta+1.96*se), width=0.1, size=1, color="#00BFC4") + 
 geom_point(data=out[out$assoc=="ab",], mapping=aes(x=as.factor(model), y=beta), size=3, shape=21, fill="#00BFC4") + scale_x_discrete(labels=c("Linear / no interactions", "Linear / interactions",  "Nonlinear / interactions", "Unweighted", "Full sample")) + xlab("") + ylab("Value of association")
 ```
 
 
-# Sensitivity analyses
+## Sensitivity analyses for non-nested samples
+
 We now present two sensitivity analyses which can be used when direct estimation of the probability weights is limited or not possible. Zhao et al (2019) is most appropriately used when probability weights can be estimated but are likely to be misspecified (e.g. missing an important predictor). Tudball et al (2020) is most appropriately used when weights cannot be estimated but there is external information on the target population (e.g. survey response rate, population means). 
 
 We will attempt to estimate average BMI in the full UK Biobank population using data on the tested sub-sample. The tested sub-sample's average BMI is around 1 unit higher than the full sample.
@@ -289,7 +305,8 @@ rbind(
 ) %>% kable
 ```
 
-## @Zhao2019
+### @Zhao2019
+
 Suppose we only measure BMI in the tested sub-sample and not the full UK Biobank sample. Our probability weights are likely to be misspecified if we estimate them using only age and sex as covariates. The sensitivity parameter in @Zhao2019 is the largest amount that the estimated weights differ from the true weights on the odds ratio scale. Given this parameter, this method provides an interval of possible values for means and average treatment effects.
 
 We begin by calculating our misspecified weights using only BMI and sex. For illustration, we calculate the true sensitivity parameter.
@@ -317,7 +334,8 @@ tibble(
 
 The resulting bounds, while quite wide, contain average BMI in the full UK Biobank population. One reason these bounds are so wide is because this method is non-parametric, that is, it does not restrict the way in the true weights may differ from the estimated weights. The trade-off is between precision (i.e. a tight bound) and accuracy (i.e. a bound that contains average BMI in the full UK Biobank population).
 
-## @Tudball2020
+### @Tudball2020
+
 Suppose we only observe the tested sub-sample. Estimating probability weights is no longer possible since we do not observe anyone who has not been tested. The two sensitivity parameters in @Tudball2020 are the smallest and largest probabilities of being tested (e.g. 1\% and 90\%). We then select a model for the probability weights as before and this method places bounds on the possible values of average BMI in the full UK Biobank population. 
 
 An advantage of this method is that we can place additional constraints on the bounds. For example, suppose we know the unconditional likelihood of being tested and the average age of UK Biobank participants. We can include these as constraints to ensure that the resulting bounds are consistent with these two population values. 
@@ -325,6 +343,7 @@ An advantage of this method is that we can place additional constraints on the b
 A non-parametric version of this method also exists but here we present the parametric version using a logistic model for the weights. As discussed above, the parametric version results in tighter bounds but carries the risk of misspecification of the weights.
 
 We first define the numerator and denominator of estimator. Since this is a mean, the numerator is the BMI variable and the denominator is a vector of ones. We also format the variables we wish to use in our probability weights. We select age, sex, BMI and their interactions.
+
 ```{r tudball_data}
 fT <- dattest$bmi
 gT <- rep(1,NROW(dattest))
@@ -337,15 +356,18 @@ D$agexsexxbmi <- D$age*D$sex*D$bmi
 ```
 
 We then define our lower bound (a) and upper bound (b) for the probability of being tested. For illustration, we use the true values estimated from the linear model with interactions.
+
 ```{r tudball_bound}
 a <- min(prs2)
 b <- max(prs2)
 ```
 
 We also select our constraints and other options for the solver.
+
 ```{r tudball_options, include=F}
 source("solve.R")
 ```
+
 ```{r}
 mycons <- list(
   list('resp', mean(dat$tested)),
@@ -357,6 +379,7 @@ opts <- list("alpha2"=0.025, "grid_bound"=4, "grid_fine"=8, "tol"=1e-4, "maxeval
 ```
 
 We are now ready to generate our bounds for average BMI.
+
 ```{r tudball_calculate}
 sens2 <- find_bound(a,b,fT,gT,D,constraints=mycons,opts,nlopts)
 
@@ -376,4 +399,4 @@ tibble(
 
 As we can see, this method produces an informative bound for average BMI in the full sample.
 
-# References
+## References
