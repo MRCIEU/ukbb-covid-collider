@@ -1,10 +1,6 @@
 ---
 title: UK Biobank example of collider bias in Covid-19 test data
 bibliography: library.bib
-output:
-  html_document:
-    toc: true
-    toc_float: true
 ---
 
 ```{r}
@@ -13,19 +9,11 @@ suppressMessages(suppressPackageStartupMessages({
 	library(dplyr)
 	library(ggplot2)
 }))
-
-knitr::opts_chunk$set(warning=FALSE, message=FALSE, echo=TRUE, cache=TRUE)
 ```
 
-## About this document
+This document is hosted at https://github.com/MRCIEU/ukbb-covid-collider.
 
-This document forms part of the analysis used in the paper:
-
-**Collider bias undermines our understanding of COVID-19 disease risk and severity**. Gareth Griffith, Tim T Morris, Matt Tudball, Annie Herbert, Giulia Mancano, Lindsey Pike, Gemma C Sharp, Tom M Palmer, George Davey Smith, Kate Tilling, Luisa Zuccolo, Neil M Davies, Gibran Hemani
-
-It is hosted at https://github.com/MRCIEU/ukbb-covid-collider.
-
-The data used in the analysis can be downloaded from: <TBD>
+---
 
 Here we show a set of analyses to illustrate collider bias induced by non-random testing of Covid-19 status amongst the UK Biobank participants, and some approaches to adjust for the bias. The methods are described in further detail in @Griffith2020.05.04.20090506.
 
@@ -203,7 +191,7 @@ rbind(
 ) %>% kable
 ```
 
-## Summary
+### Summary
 
 The age-sex and BMI-sex associations are distorted within the samples tested for covid, likely because these variables influence inclusion into the sample. We show that inverse probability weighting the individuals in the sample based on the variables that influence inclusion can help to reduce the collider bias. 
 
