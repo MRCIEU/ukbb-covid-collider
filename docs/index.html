@@ -1971,6 +1971,86 @@ ipw3 &lt;- ifelse(dat$tested==1, p/prs3, (1-p)/prs3)</code></pre>
 </div>
 <div id="comparison-of-full-sample-unweighted-and-weighted-estimates" class="section level2">
 <h2>Comparison of full sample, unweighted and weighted estimates</h2>
+<p>Below we generate the estimates in the full sample and in the tested subsample using different weights.</p>
+<pre class="r"><code># Prepare output file
+group &lt;- expand.grid(c(&quot;as&quot;,&quot;ab&quot;,&quot;bs&quot;),c(1,2,3,4,5))
+out &lt;- data.frame(cbind(group, matrix(nrow=15, ncol=2)))
+names(out) &lt;- c(&quot;assoc&quot;,&quot;model&quot;,&quot;beta&quot;,&quot;se&quot;)
+
+# Age and sex association
+# Full sample
+mod1 &lt;- summary(lm(age ~ sex, dat))
+out[out$assoc==&quot;as&quot;&amp;out$model==5,&quot;beta&quot;] &lt;- coefficients(mod1)[&quot;sex&quot;,&quot;Estimate&quot;]
+out[out$assoc==&quot;as&quot;&amp;out$model==5,&quot;se&quot;] &lt;- coefficients(mod1)[&quot;sex&quot;,&quot;Std. Error&quot;]
+# Tested subsample
+mod2 &lt;- summary(lm(age ~ sex, dat, subset=dat$tested==1))
+out[out$assoc==&quot;as&quot;&amp;out$model==4,&quot;beta&quot;] &lt;- coefficients(mod2)[&quot;sex&quot;,&quot;Estimate&quot;]
+out[out$assoc==&quot;as&quot;&amp;out$model==4,&quot;se&quot;] &lt;- coefficients(mod2)[&quot;sex&quot;,&quot;Std. Error&quot;]
+
+# Inverse weighted (linear, no interactions)
+mod3 &lt;- summary(lm(age ~ sex, dat, weight=ipw1, subset=tested==1))
+out[out$assoc==&quot;as&quot;&amp;out$model==1,&quot;beta&quot;] &lt;- coefficients(mod3)[&quot;sex&quot;,&quot;Estimate&quot;]
+out[out$assoc==&quot;as&quot;&amp;out$model==1,&quot;se&quot;] &lt;- coefficients(mod3)[&quot;sex&quot;,&quot;Std. Error&quot;]
+
+# Inverse weighted (linear, interactions)
+mod4 &lt;- summary(lm(age ~ sex, dat, weight=ipw2, subset=tested==1))
+out[out$assoc==&quot;as&quot;&amp;out$model==2,&quot;beta&quot;] &lt;- coefficients(mod4)[&quot;sex&quot;,&quot;Estimate&quot;]
+out[out$assoc==&quot;as&quot;&amp;out$model==2,&quot;se&quot;] &lt;- coefficients(mod4)[&quot;sex&quot;,&quot;Std. Error&quot;]
+
+# Inverse weighted (nonlinear, interactions)
+mod5 &lt;- summary(lm(age ~ sex, dat, weight=ipw3, subset=tested==1))
+out[out$assoc==&quot;as&quot;&amp;out$model==3,&quot;beta&quot;] &lt;- coefficients(mod5)[&quot;sex&quot;,&quot;Estimate&quot;]
+out[out$assoc==&quot;as&quot;&amp;out$model==3,&quot;se&quot;] &lt;- coefficients(mod5)[&quot;sex&quot;,&quot;Std. Error&quot;]
+
+# BMI and sex association
+# Full sample
+mod1 &lt;- summary(lm(bmi ~ sex, dat))
+out[out$assoc==&quot;bs&quot;&amp;out$model==5,&quot;beta&quot;] &lt;- coefficients(mod1)[&quot;sex&quot;,&quot;Estimate&quot;]
+out[out$assoc==&quot;bs&quot;&amp;out$model==5,&quot;se&quot;] &lt;- coefficients(mod1)[&quot;sex&quot;,&quot;Std. Error&quot;]
+# Tested subsample
+mod2 &lt;- summary(lm(bmi ~ sex, dat, subset=dat$tested==1))
+out[out$assoc==&quot;bs&quot;&amp;out$model==4,&quot;beta&quot;] &lt;- coefficients(mod2)[&quot;sex&quot;,&quot;Estimate&quot;]
+out[out$assoc==&quot;bs&quot;&amp;out$model==4,&quot;se&quot;] &lt;- coefficients(mod2)[&quot;sex&quot;,&quot;Std. Error&quot;]
+
+# Inverse weighted (linear, no interactions)
+mod3 &lt;- summary(lm(bmi ~ sex, dat, weight=ipw1, subset=tested==1))
+out[out$assoc==&quot;bs&quot;&amp;out$model==1,&quot;beta&quot;] &lt;- coefficients(mod3)[&quot;sex&quot;,&quot;Estimate&quot;]
+out[out$assoc==&quot;bs&quot;&amp;out$model==1,&quot;se&quot;] &lt;- coefficients(mod3)[&quot;sex&quot;,&quot;Std. Error&quot;]
+
+# Inverse weighted (linear, interactions)
+mod4 &lt;- summary(lm(bmi ~ sex, dat, weight=ipw2, subset=tested==1))
+out[out$assoc==&quot;bs&quot;&amp;out$model==2,&quot;beta&quot;] &lt;- coefficients(mod4)[&quot;sex&quot;,&quot;Estimate&quot;]
+out[out$assoc==&quot;bs&quot;&amp;out$model==2,&quot;se&quot;] &lt;- coefficients(mod4)[&quot;sex&quot;,&quot;Std. Error&quot;]
+
+# Inverse weighted (nonlinear, interactions)
+mod5 &lt;- summary(lm(bmi ~ sex, dat, weight=ipw3, subset=tested==1))
+out[out$assoc==&quot;bs&quot;&amp;out$model==3,&quot;beta&quot;] &lt;- coefficients(mod5)[&quot;sex&quot;,&quot;Estimate&quot;]
+out[out$assoc==&quot;bs&quot;&amp;out$model==3,&quot;se&quot;] &lt;- coefficients(mod5)[&quot;sex&quot;,&quot;Std. Error&quot;]
+
+# BMI and age association
+# Full sample
+mod1 &lt;- summary(lm(bmi ~ age, dat))
+out[out$assoc==&quot;ab&quot;&amp;out$model==5,&quot;beta&quot;] &lt;- coefficients(mod1)[&quot;age&quot;,&quot;Estimate&quot;]
+out[out$assoc==&quot;ab&quot;&amp;out$model==5,&quot;se&quot;] &lt;- coefficients(mod1)[&quot;age&quot;,&quot;Std. Error&quot;]
+# Tested subsample
+mod2 &lt;- summary(lm(bmi ~ age, dat, subset=dat$tested==1))
+out[out$assoc==&quot;ab&quot;&amp;out$model==4,&quot;beta&quot;] &lt;- coefficients(mod2)[&quot;age&quot;,&quot;Estimate&quot;]
+out[out$assoc==&quot;ab&quot;&amp;out$model==4,&quot;se&quot;] &lt;- coefficients(mod2)[&quot;age&quot;,&quot;Std. Error&quot;]
+
+# Inverse weighted (linear, no interactions)
+mod3 &lt;- summary(lm(bmi ~ age, dat, weight=ipw1, subset=tested==1))
+out[out$assoc==&quot;ab&quot;&amp;out$model==1,&quot;beta&quot;] &lt;- coefficients(mod3)[&quot;age&quot;,&quot;Estimate&quot;]
+out[out$assoc==&quot;ab&quot;&amp;out$model==1,&quot;se&quot;] &lt;- coefficients(mod3)[&quot;age&quot;,&quot;Std. Error&quot;]
+
+# Inverse weighted (linear, interactions)
+mod4 &lt;- summary(lm(bmi ~ age, dat, weight=ipw2, subset=tested==1))
+out[out$assoc==&quot;ab&quot;&amp;out$model==2,&quot;beta&quot;] &lt;- coefficients(mod4)[&quot;age&quot;,&quot;Estimate&quot;]
+out[out$assoc==&quot;ab&quot;&amp;out$model==2,&quot;se&quot;] &lt;- coefficients(mod4)[&quot;age&quot;,&quot;Std. Error&quot;]
+
+# Inverse weighted (nonlinear, interactions)
+mod5 &lt;- summary(lm(bmi ~ age, dat, weight=ipw3, subset=tested==1))
+out[out$assoc==&quot;ab&quot;&amp;out$model==3,&quot;beta&quot;] &lt;- coefficients(mod5)[&quot;age&quot;,&quot;Estimate&quot;]
+out[out$assoc==&quot;ab&quot;&amp;out$model==3,&quot;se&quot;] &lt;- coefficients(mod5)[&quot;age&quot;,&quot;Std. Error&quot;]</code></pre>
 <div id="age-and-sex-association" class="section level3">
 <h3>Age and sex association</h3>
 <pre class="r"><code>ggplot() + geom_errorbar(data=out[out$assoc==&quot;as&quot;,], mapping=aes(x=as.factor(model), ymin=beta-1.96*se,    ymax=beta+1.96*se), width=0.1, size=1, color=&quot;#00BFC4&quot;) + 
@@ -2104,7 +2184,8 @@ b &lt;- max(prs2)</code></pre>
 
 nlopts &lt;- list(&quot;xtol_rel&quot;=1e-8, &quot;ftol_rel&quot;=1e-10, &quot;maxeval&quot;=-1)
 opts &lt;- list(&quot;alpha2&quot;=0.025, &quot;grid_bound&quot;=4, &quot;grid_fine&quot;=8, &quot;tol&quot;=1e-4, &quot;maxeval&quot;=3e2, &quot;newton_step&quot;=0.1)</code></pre>
-<p>We are now ready to generate our bounds for average BMI.</p>
+<p>We are now ready to generate our bounds for average BMI. To do this we will use the <code>find_bound</code> function that is defined in the main repository (<a href="https://github.com/MRCIEU/ukbb-covid-collider" class="uri">https://github.com/MRCIEU/ukbb-covid-collider</a>).</p>
+<pre class="r"><code>source(&quot;solve.R&quot;)</code></pre>
 <pre class="r"><code>sens2 &lt;- find_bound(a,b,fT,gT,D,constraints=mycons,opts,nlopts)</code></pre>
 <pre><code>## [1] &quot;Finding the nearest valid parameters from 256 starting values...&quot;
 ## [1] &quot;Found 26 valid starting parameter(s). Finding bounds...&quot;</code></pre>
@@ -2143,6 +2224,11 @@ tibble(
 <p>As we can see, this method produces an informative bound for average BMI in the full sample.</p>
 </div>
 </div>
+<div id="summary" class="section level2">
+<h2>Summary</h2>
+<p>Here we have shown that inverse probability weighting is able to recover sample-wide associations between BMI, age and sex within the non-random covid-tested subset. We also show that if the data is non-nested, in that a model cannot be fitted to predict participation, then summary data from a reference population can be used to generate adjusted estimates within the selected sample.</p>
+<p>In general practice, there are a few things to further consider. First, we only used BMI, age and sex to develop weights here. In principle one would actually use as many variables as is necessary (even if they are not the exact variables being analysed) to build the model for sample selection. Second, there is likely to be a change in selection pressure over time, so it is important to use weights that are relevant to the timings of the variables being recorded. Third, in the UK Biobank the reality is slightly more complicated than has been presented here, in that the samples in the overall UK Biobank are themselves non-random (and not representative of the general population) <span class="citation">(Munafò et al. 2018)</span>.</p>
+</div>
 <div id="references" class="section level2 unnumbered">
 <h2>References</h2>
 <div id="refs" class="references">
@@ -2151,6 +2237,9 @@ tibble(
 </div>
 <div id="ref-Groenwold2020">
 <p>Groenwold, Rolf H H, Tom M Palmer, and Kate Tilling. 2020. “To adjust or not to adjust ? What to do when a ‘confounder’ is only measured after exposure.” <a href="https://osf.io/sj7ch/">https://osf.io/sj7ch/</a>.</p>
+</div>
+<div id="ref-Munafo2018-fv">
+<p>Munafò, Marcus R, Kate Tilling, Amy E Taylor, David M Evans, and George Davey Smith. 2018. “Collider Scope: When Selection Bias Can Substantially Influence Observed Associations.” <em>Int. J. Epidemiol.</em> 47 (1): 226–35.</p>
 </div>
 <div id="ref-Sayon-Orea2020">
 <p>Sayon-Orea, Carmen, Conchi Moreno-Iribas, Josu Delfrade, Manuela Sanchez-Echenique, Pilar Amiano, Eva Ardanaz, Javier Gorricho, Garbiñe Basterra, Marian Nuin, and Marcela Guevara. 2020. “Inverse-probability weighting and multiple imputation for evaluating selection bias in the estimation of childhood obesity prevalence using data from electronic health records.” <em>BMC Medical Informatics and Decision Making</em> 20 (1): 9. <a href="https://doi.org/10.1186/s12911-020-1020-8">https://doi.org/10.1186/s12911-020-1020-8</a>.</p>

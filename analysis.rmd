@@ -175,7 +175,9 @@ ipw3 <- ifelse(dat$tested==1, p/prs3, (1-p)/prs3)
 
 ## Comparison of full sample, unweighted and weighted estimates
 
-```{r models, include=F}
+Below we generate the estimates in the full sample and in the tested subsample using different weights.
+
+```{r models}
 # Prepare output file
 group <- expand.grid(c("as","ab","bs"),c(1,2,3,4,5))
 out <- data.frame(cbind(group, matrix(nrow=15, ncol=2)))
@@ -364,10 +366,6 @@ b <- max(prs2)
 
 We also select our constraints and other options for the solver.
 
-```{r tudball_options, include=F}
-source("solve.R")
-```
-
 ```{r}
 mycons <- list(
   list('resp', mean(dat$tested)),
@@ -378,7 +376,11 @@ nlopts <- list("xtol_rel"=1e-8, "ftol_rel"=1e-10, "maxeval"=-1)
 opts <- list("alpha2"=0.025, "grid_bound"=4, "grid_fine"=8, "tol"=1e-4, "maxeval"=3e2, "newton_step"=0.1)
 ```
 
-We are now ready to generate our bounds for average BMI.
+We are now ready to generate our bounds for average BMI. To do this we will use the `find_bound` function that is defined in the main repository (https://github.com/MRCIEU/ukbb-covid-collider).
+
+```{r tudball_options}
+source("solve.R")
+```
 
 ```{r tudball_calculate}
 sens2 <- find_bound(a,b,fT,gT,D,constraints=mycons,opts,nlopts)
@@ -398,5 +400,11 @@ tibble(
 ```
 
 As we can see, this method produces an informative bound for average BMI in the full sample.
+
+## Summary
+
+Here we have shown that inverse probability weighting is able to recover sample-wide associations between BMI, age and sex within the non-random covid-tested subset. We also show that if the data is non-nested, in that a model cannot be fitted to predict participation, then summary data from a reference population can be used to generate adjusted estimates within the selected sample.
+
+In general practice, there are a few things to further consider. First, we only used BMI, age and sex to develop weights here. In principle one would actually use as many variables as is necessary (even if they are not the exact variables being analysed) to build the model for sample selection. Second, there is likely to be a change in selection pressure over time, so it is important to use weights that are relevant to the timings of the variables being recorded. Third, in the UK Biobank the reality is slightly more complicated than has been presented here, in that the samples in the overall UK Biobank are themselves non-random (and not representative of the general population) [@Munafo2018-fv].
 
 ## References
