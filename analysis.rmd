@@ -43,7 +43,7 @@ knitr::opts_chunk$set(warning=FALSE, message=FALSE, echo=TRUE, cache=TRUE)
 
 ```{r}
 load("data/dat.rdata")
-dat <- dat[complete.cases(dat), ]
+dat <- dat[complete.cases(dat) | is.na(dat$positive), ]
 str(dat)
 ```
 
