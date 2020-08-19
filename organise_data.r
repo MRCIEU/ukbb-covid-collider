@@ -19,7 +19,10 @@ head(covid$eid)
 dat <- tibble(eid=age$eid, age=age$age, sex=sex$sex, bmi=bmi$bmi, tested=eid %in% covid$eid %>% as.numeric)
 table(dat$tested)
 
+covp <- covid %>% dplyr::select(eid, positive=result)
+dat <- merge(dat, covp, by="eid", all.x=TRUE)
 dat <- subset(dat, select=-c(eid))
+
 
 save(dat, file="data/dat.rdata")
 
