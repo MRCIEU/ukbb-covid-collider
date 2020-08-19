@@ -2227,7 +2227,13 @@ tibble(
 <div id="summary" class="section level2">
 <h2>Summary</h2>
 <p>Here we have shown that inverse probability weighting is able to recover sample-wide associations between BMI, age and sex within the non-random covid-tested subset. We also show that if the data is non-nested, in that a model cannot be fitted to predict participation, then summary data from a reference population can be used to generate adjusted estimates within the selected sample.</p>
-<p>In general practice, there are a few things to further consider. First, we only used BMI, age and sex to develop weights here. In principle one would actually use as many variables as is necessary (even if they are not the exact variables being analysed) to build the model for sample selection. Second, there is likely to be a change in selection pressure over time, so it is important to use weights that are relevant to the timings of the variables being recorded. Third, in the UK Biobank the reality is slightly more complicated than has been presented here, in that the samples in the overall UK Biobank are themselves non-random (and not representative of the general population) <span class="citation">(Munafò et al. 2018)</span>.</p>
+<p>In general practice, there are a few things to further consider.</p>
+<ul>
+<li>We only used BMI, age and sex to develop weights here. In principle one would actually use as many variables as is necessary (even if they are not the exact variables being analysed) to build the model for sample selection.</li>
+<li>There is likely to be a change in selection pressure over time, so it is important to use weights that are relevant to the timings of the variables being recorded</li>
+<li>Third, in the UK Biobank the reality is slightly more complicated than has been presented here, in that the samples in the overall UK Biobank are themselves non-random (and not representative of the general population) <span class="citation">(Munafò et al. 2018)</span>.</li>
+<li>In practice an outcome of interest might be COVID test positive vs test negative. In this case, we only have test results in the subset, so we cannot treat it as a nested sample unless we assume that our selection model captures the influence of testing positive on being included in the sample. Therefore, performing the non-nested sensitivity analyses would be important.</li>
+</ul>
 </div>
 <div id="references" class="section level2 unnumbered">
 <h2>References</h2>
