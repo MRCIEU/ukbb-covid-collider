@@ -19,8 +19,9 @@ head(covid$eid)
 dat <- tibble(eid=age$eid, age=age$age, sex=sex$sex, bmi=bmi$bmi, tested=eid %in% covid$eid %>% as.numeric)
 table(dat$tested)
 
-covp <- covid %>% dplyr::select(eid, positive=result)
-dat <- merge(dat, covp, by="eid", all.x=TRUE)
+covp <- covid %>% group_by(eid) %>% summarise(positive=any(result==1) %>% as.numeric)
+
+dat <- merge(dat, covp, by="eid", all.x=TRUE) %>% as_tibble()
 dat <- subset(dat, select=-c(eid))
 
 
