@@ -5,6 +5,9 @@ output:
   html_document:
     toc: true
     toc_float: true
+  pdf_document:
+    toc: true
+    toc_depth: 2
 ---
 
 ## About this document
@@ -43,7 +46,7 @@ knitr::opts_chunk$set(warning=FALSE, message=FALSE, echo=TRUE, cache=TRUE)
 
 ```{r}
 load("data/dat.rdata")
-dat <- dat[complete.cases(dat) | is.na(dat$positive), ]
+dat <- dat[complete.cases(dat), ]
 str(dat)
 ```
 
@@ -279,6 +282,63 @@ geom_point(data=out[out$assoc=="bs",], mapping=aes(x=as.factor(model), y=beta), 
 ggplot() + geom_errorbar(data=out[out$assoc=="ab",], mapping=aes(x=as.factor(model), ymin=beta-1.96*se,    ymax=beta+1.96*se), width=0.1, size=1, color="#00BFC4") + 
 geom_point(data=out[out$assoc=="ab",], mapping=aes(x=as.factor(model), y=beta), size=3, shape=21, fill="#00BFC4") + scale_x_discrete(labels=c("Linear / no interactions", "Linear / interactions",  "Nonlinear / interactions", "Unweighted", "Full sample")) + xlab("") + ylab("Value of association")
 ```
+
+
+### Incomplete models for generating weights
+
+Suppose that the analysis of interest is the effect of `age` on `bmi` and we control for `sex`
+
+```
+bmi ~ age + sex
+```
+
+the weights need to include the influences of all factors in the model on the probability of being in the sample (being `tested` in this case). To illustrate let's generate a simple set of weights that include only the exposure and the outcome e.g.
+
+```{r}
+mod8 <- glm(tested ~ bmi + age, data=dat, family="binomial")
+coefficients(summary(mod8)) %>% kable
+prs4 <- fitted.values(mod8)
+ipw4 <- ifelse(dat$tested==1, p/prs4, (1-p)/prs4)
+```
+
+or another set of weights that includes `age`, `sex` and `bmi`
+
+```{r}
+mod9 <- glm(tested ~ bmi + age + sex, data=dat, family="binomial")
+coefficients(summary(mod9)) %>% kable
+prs5 <- fitted.values(mod9)
+ipw5 <- ifelse(dat$tested==1, p/prs5, (1-p)/prs5)
+```
+
+The effect estimate of age on bmi:
+
+```{r}
+summary(lm(bmi ~ age + sex, data=dat)) %>% coefficients %>% kable
+```
+
+Now in the tested subset:
+
+```{r}
+summary(lm(bmi ~ age + sex, data=dat, subset=tested==1)) %>% coefficients %>% kable
+```
+
+With simple weights:
+
+```{r}
+summary(lm(bmi ~ age + sex, data=dat, subset=tested==1, weight=ipw4)) %>% coefficients %>% kable
+```
+
+Full weights:
+
+```{r}
+summary(lm(bmi ~ age + sex, data=dat, subset=tested==1, weight=ipw5)) %>% coefficients %>% kable
+```
+
+```{r}
+summary(lm(bmi ~ age + sex, data=dat, subset=tested==1, weight=ipw3)) %>% coefficients %>% kable
+```
+
+
 
 
 ## Sensitivity analyses for non-nested samples
