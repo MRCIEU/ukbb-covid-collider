@@ -27,4 +27,4 @@ rule analysis:
 	output:
 		"docs/index.html"
 	shell:
-		"Rscript -e 'rmarkdown::render(\"analysis.rmd\", output_dir=\"docs\", output_file=\"index.html\")'"
+		"Rscript -e 'rmarkdown::render(\"analysis.rmd\", output_dir=\"docs\", output_file=\"index.html\", output_format=\"all\")'"
