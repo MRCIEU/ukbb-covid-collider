@@ -23,10 +23,9 @@ The following variables from the [UK biobank phenotype data](http://biobank.ctsu
 - `31-0.0` - Sex (male = 1, female = 0)
 - `23104-0.0` - Body mass index (BMI)
 
-Also, the linked Covid-19 freeze from `2020-06-05` is used to identify which individuals have been tested.
+Also, the linked Covid-19 freeze from `2020-06-05` is used to identify which individuals have been tested and tested positive.
 
-The analysis that follows will look at simple associations between age, sex and BMI in the entire UK Biobank sample, contrasted against their associations amongst individuals selected to be tested.
-
+In the analysis that follows, we will be estimating the association between testing positive for Covid-19 and the risk factors age, sex and BMI. The key concern with such an analysis is that we only observe test results among individuals who have received a test. SARS-CoV-2 infection and the risk factors themselves will influence the likelihood of receiving a test, which could induce spurious associations among them when we condition on receiving a test. We will explore inverse probability weighting and sensitivity analyses to address the potential collider bias.
 
 ## Read in the data
 
@@ -42,8 +41,8 @@ knitr::opts_chunk$set(warning=FALSE, message=FALSE, echo=TRUE, cache=TRUE)
 ```
 
 ```{r}
-load("data/dat.rdata")
-dat <- dat[complete.cases(dat) | is.na(dat$positive), ]
+load("X:/working/data/dat.rdata")
+dat <- dat[complete.cases(dat[,c("age","sex","bmi","tested")]), ]
 str(dat)
 ```
 
@@ -60,22 +59,62 @@ How many individuals tested:
 table(dat$tested)
 ```
 
+How many individuals tested positive:
+
+```{r}
+table(dat$positive)
+```
+
+## Unweighted associations
+
+The most basic approach is to report the raw pairwise associations between the risk factors and testing positive. 
+
+```{r}
+assoc <- data.frame(matrix(nrow=3, ncol=3))
+names(assoc) <- c("risk_factor", "beta", "se")
+assoc$risk_factor <- c("sex", "age", "bmi")
+
+mod <- summary(lm(positive ~ sex, dat))
+assoc[assoc$risk_factor=="sex",c("beta","se")] <-  coefficients(mod)["sex",c("Estimate","Std. Error")]
+
+mod <- summary(lm(positive ~ age, dat))
+assoc[assoc$risk_factor=="age",c("beta","se")] <-  coefficients(mod)["age",c("Estimate","Std. Error")]
+
+mod <- summary(lm(positive ~ bmi, dat))
+assoc[assoc$risk_factor=="bmi",c("beta","se")] <-  coefficients(mod)["bmi",c("Estimate","Std. Error")]
+
+ggplot(assoc, aes(risk_factor, beta)) + 
+  geom_errorbar(
+    aes(ymin = beta-1.96*se, 
+        ymax = beta+1.96*se),
+    width = 0.1, size=1, color="#00BFC4") + 
+geom_point(size=3, shape=21, fill="#00BFC4") +
+geom_hline(yintercept=0, linetype="dashed", color = "#575863") + 
+scale_x_discrete(labels=c("Age", "BMI", "Sex")) +
+xlab("") + ylab("Value of association") + 
+coord_flip()
+```
+
+However, it is unclear to what extent these associations may be distorted by collider bias.
+
 ## Illustration of collider bias
 
-Age, sex and BMI all strongly influence the likelihood of being tested:
+An simple exploratory exercise is to compare full sample and sub-sample associations among the variables that are observed in both, namely, age, sex and BMI. 
+
+We begin by exploring their relationship with receiving a test.
 
 ```{r}
 summary(glm(tested ~ age + sex + bmi, data=dat, family="binomial"))
 ```
 
-Hence we would expect the relationships between these variables to be skewed within the tested sample. For example, this is the relationship between age and sex in the total sample
+Therefore, we would expect the relationships between these variables to be skewed within the tested sample. For example, this is the relationship between age and sex in the full sample:
 
 ```{r}
 mod1 <- summary(lm(age ~ sex, dat))
 coefficients(mod1) %>% kable
 ```
 
-And here it is amongst only those tested:
+And here it is among those who received a test:
 
 ```{r}
 mod2 <- summary(lm(age ~ sex, dat, subset=dat$tested==1))
@@ -102,9 +141,11 @@ where the association almost halves.
 
 ## Inverse probability weights in a nested sample
 
-If the tested individuals are a subset of the entire sample, then it is possible to generate probabilities for individuals being included in the tested subsample based on the colliding variables. The inverse of these probabilities can be used to weight the association estimate towards being representative of the overall sample.
+The first approach we consider is inverse probability weighting. Since tested individuals are a subset of the entire sample, it is possible to generate probabilities of being included in the tested sub-sample based on the measured risk factors. The inverse of these probabilities can be used to weight the association estimate towards being representative of the full sample. 
 
-First find which variables associate with being tested. Begin with marginal effects
+Note that, since testing positive is only measured within the tested sub-sample, we cannot include it in the weighting model. Therefore, for the inverse weighted estimates to be unbiased for the full-sample risk factor associations, we would need each individual's likelihood of being tested to be independent of whether they are infected with Covid-19 given their age, sex and BMI. Since this is unlikely to be true, we will explore sensitivity analyses later in the tutorial.
+
+First, find which variables associate with being tested. Begin with marginal effects
 
 ```{r}
 mod5 <- glm(tested ~ age + sex + bmi, data=dat, family="binomial")
@@ -119,7 +160,7 @@ mod6 <- glm(tested ~ bmi + age + sex + bmi * age + bmi * sex + age * sex + age *
 coefficients(summary(mod6)) %>% kable
 ```
 
-Curiously the marginal BMI effect appears to be captured by interaction terms only. Centering the marginal variables may be more appropriate when estimating interactions.
+Curiously, the marginal BMI effect appears to be captured by interaction terms only. Centering the marginal variables may be more appropriate when estimating interactions.
 
 ```{r}
 dat$bmixage <- scale(dat$bmi) * scale(dat$age)
@@ -155,7 +196,7 @@ ggplot(dat[dat$bmi<60,],aes(x=bmi, y=tested)) +
   scale_x_continuous(breaks=seq(12,60,by=5))
 ```
 
-We select a linear regression which is quadratic in age, cubic in BMI and contains all linear interactions between age, sex and BMI. Results are similar for logistic regression.
+We select a logistic regression which is quadratic in age, cubic in BMI and contains all linear interactions between age, sex and BMI.
 
 ```{r model_nonlinear}
 mod8 <- glm(tested ~ sex + poly(age, 2) + poly(bmi, 3) + bmixage + bmixsex + agexsex + agexsexxbmi, data=dat, family="binomial")
@@ -168,14 +209,14 @@ The probabilities are largely clustered close to zero, so when using the inverse
 
 ```{r stabilise}
 p <- mean(as.numeric(dat$tested)) 
-ipw1 <- ifelse(dat$tested==1, p/prs1, (1-p)/prs1)
-ipw2 <- ifelse(dat$tested==1, p/prs2, (1-p)/prs2)
-ipw3 <- ifelse(dat$tested==1, p/prs3, (1-p)/prs3)
+ipw1 <- ifelse(dat$tested==1, p/prs1, (1-p)/(1-prs1))
+ipw2 <- ifelse(dat$tested==1, p/prs2, (1-p)/(1-prs2))
+ipw3 <- ifelse(dat$tested==1, p/prs3, (1-p)/(1-prs3))
 ```
 
-## Comparison of full sample, unweighted and weighted estimates
+### Validation exercise: Comparing full sample, unweighted and weighted associations among fully measured variables
 
-Below we generate the estimates in the full sample and in the tested subsample using different weights.
+Below we perform a validation exercise where we compare the full sample associations with the weighted associations for age, sex and BMI.
 
 ```{r models}
 # Prepare output file
@@ -185,145 +226,160 @@ names(out) <- c("assoc","model","beta","se")
 
 # Age and sex association
 # Full sample
-mod1 <- summary(lm(age ~ sex, dat))
-out[out$assoc=="as"&out$model==5,"beta"] <- coefficients(mod1)["sex","Estimate"]
-out[out$assoc=="as"&out$model==5,"se"] <- coefficients(mod1)["sex","Std. Error"]
+mod <- summary(lm(age ~ sex, dat))
+out[out$assoc=="as"&out$model==5,c("beta","se")] <- coefficients(mod)["sex",c("Estimate","Std. Error")]
+
 # Tested subsample
-mod2 <- summary(lm(age ~ sex, dat, subset=dat$tested==1))
-out[out$assoc=="as"&out$model==4,"beta"] <- coefficients(mod2)["sex","Estimate"]
-out[out$assoc=="as"&out$model==4,"se"] <- coefficients(mod2)["sex","Std. Error"]
+mod <- summary(lm(age ~ sex, dat, subset=dat$tested==1))
+out[out$assoc=="as"&out$model==4,c("beta","se")] <- coefficients(mod)["sex",c("Estimate","Std. Error")]
 
 # Inverse weighted (linear, no interactions)
-mod3 <- summary(lm(age ~ sex, dat, weight=ipw1, subset=tested==1))
-out[out$assoc=="as"&out$model==1,"beta"] <- coefficients(mod3)["sex","Estimate"]
-out[out$assoc=="as"&out$model==1,"se"] <- coefficients(mod3)["sex","Std. Error"]
+mod <- summary(lm(age ~ sex, dat, weight=ipw1, subset=tested==1))
+out[out$assoc=="as"&out$model==1,c("beta","se")] <- coefficients(mod)["sex",c("Estimate","Std. Error")]
 
 # Inverse weighted (linear, interactions)
-mod4 <- summary(lm(age ~ sex, dat, weight=ipw2, subset=tested==1))
-out[out$assoc=="as"&out$model==2,"beta"] <- coefficients(mod4)["sex","Estimate"]
-out[out$assoc=="as"&out$model==2,"se"] <- coefficients(mod4)["sex","Std. Error"]
+mod <- summary(lm(age ~ sex, dat, weight=ipw2, subset=tested==1))
+out[out$assoc=="as"&out$model==2,c("beta","se")] <- coefficients(mod)["sex",c("Estimate","Std. Error")]
 
 # Inverse weighted (nonlinear, interactions)
-mod5 <- summary(lm(age ~ sex, dat, weight=ipw3, subset=tested==1))
-out[out$assoc=="as"&out$model==3,"beta"] <- coefficients(mod5)["sex","Estimate"]
-out[out$assoc=="as"&out$model==3,"se"] <- coefficients(mod5)["sex","Std. Error"]
+mod <- summary(lm(age ~ sex, dat, weight=ipw3, subset=tested==1))
+out[out$assoc=="as"&out$model==3,c("beta","se")] <- coefficients(mod)["sex",c("Estimate","Std. Error")]
 
 # BMI and sex association
 # Full sample
-mod1 <- summary(lm(bmi ~ sex, dat))
-out[out$assoc=="bs"&out$model==5,"beta"] <- coefficients(mod1)["sex","Estimate"]
-out[out$assoc=="bs"&out$model==5,"se"] <- coefficients(mod1)["sex","Std. Error"]
+mod <- summary(lm(bmi ~ sex, dat))
+out[out$assoc=="bs"&out$model==5,c("beta","se")] <- coefficients(mod)["sex",c("Estimate","Std. Error")]
+
 # Tested subsample
-mod2 <- summary(lm(bmi ~ sex, dat, subset=dat$tested==1))
-out[out$assoc=="bs"&out$model==4,"beta"] <- coefficients(mod2)["sex","Estimate"]
-out[out$assoc=="bs"&out$model==4,"se"] <- coefficients(mod2)["sex","Std. Error"]
+mod <- summary(lm(bmi ~ sex, dat, subset=dat$tested==1))
+out[out$assoc=="bs"&out$model==4,c("beta","se")] <- coefficients(mod)["sex",c("Estimate","Std. Error")]
 
 # Inverse weighted (linear, no interactions)
-mod3 <- summary(lm(bmi ~ sex, dat, weight=ipw1, subset=tested==1))
-out[out$assoc=="bs"&out$model==1,"beta"] <- coefficients(mod3)["sex","Estimate"]
-out[out$assoc=="bs"&out$model==1,"se"] <- coefficients(mod3)["sex","Std. Error"]
+mod <- summary(lm(bmi ~ sex, dat, weight=ipw1, subset=tested==1))
+out[out$assoc=="bs"&out$model==1,c("beta","se")] <- coefficients(mod)["sex",c("Estimate","Std. Error")]
 
 # Inverse weighted (linear, interactions)
-mod4 <- summary(lm(bmi ~ sex, dat, weight=ipw2, subset=tested==1))
-out[out$assoc=="bs"&out$model==2,"beta"] <- coefficients(mod4)["sex","Estimate"]
-out[out$assoc=="bs"&out$model==2,"se"] <- coefficients(mod4)["sex","Std. Error"]
+mod <- summary(lm(bmi ~ sex, dat, weight=ipw2, subset=tested==1))
+out[out$assoc=="bs"&out$model==2,c("beta","se")] <- coefficients(mod)["sex",c("Estimate","Std. Error")]
 
 # Inverse weighted (nonlinear, interactions)
-mod5 <- summary(lm(bmi ~ sex, dat, weight=ipw3, subset=tested==1))
-out[out$assoc=="bs"&out$model==3,"beta"] <- coefficients(mod5)["sex","Estimate"]
-out[out$assoc=="bs"&out$model==3,"se"] <- coefficients(mod5)["sex","Std. Error"]
+mod <- summary(lm(bmi ~ sex, dat, weight=ipw3, subset=tested==1))
+out[out$assoc=="bs"&out$model==3,c("beta","se")] <- coefficients(mod)["sex",c("Estimate","Std. Error")]
 
 # BMI and age association
 # Full sample
-mod1 <- summary(lm(bmi ~ age, dat))
-out[out$assoc=="ab"&out$model==5,"beta"] <- coefficients(mod1)["age","Estimate"]
-out[out$assoc=="ab"&out$model==5,"se"] <- coefficients(mod1)["age","Std. Error"]
+mod <- summary(lm(bmi ~ age, dat))
+out[out$assoc=="ab"&out$model==5,c("beta","se")] <- coefficients(mod)["age",c("Estimate","Std. Error")]
+
 # Tested subsample
-mod2 <- summary(lm(bmi ~ age, dat, subset=dat$tested==1))
-out[out$assoc=="ab"&out$model==4,"beta"] <- coefficients(mod2)["age","Estimate"]
-out[out$assoc=="ab"&out$model==4,"se"] <- coefficients(mod2)["age","Std. Error"]
+mod <- summary(lm(bmi ~ age, dat, subset=dat$tested==1))
+out[out$assoc=="ab"&out$model==4,c("beta","se")] <- coefficients(mod)["age",c("Estimate","Std. Error")]
 
 # Inverse weighted (linear, no interactions)
-mod3 <- summary(lm(bmi ~ age, dat, weight=ipw1, subset=tested==1))
-out[out$assoc=="ab"&out$model==1,"beta"] <- coefficients(mod3)["age","Estimate"]
-out[out$assoc=="ab"&out$model==1,"se"] <- coefficients(mod3)["age","Std. Error"]
+mod <- summary(lm(bmi ~ age, dat, weight=ipw1, subset=tested==1))
+out[out$assoc=="ab"&out$model==1,c("beta","se")] <- coefficients(mod)["age",c("Estimate","Std. Error")]
 
 # Inverse weighted (linear, interactions)
-mod4 <- summary(lm(bmi ~ age, dat, weight=ipw2, subset=tested==1))
-out[out$assoc=="ab"&out$model==2,"beta"] <- coefficients(mod4)["age","Estimate"]
-out[out$assoc=="ab"&out$model==2,"se"] <- coefficients(mod4)["age","Std. Error"]
+mod <- summary(lm(bmi ~ age, dat, weight=ipw2, subset=tested==1))
+out[out$assoc=="ab"&out$model==2,c("beta","se")] <- coefficients(mod)["age",c("Estimate","Std. Error")]
 
 # Inverse weighted (nonlinear, interactions)
-mod5 <- summary(lm(bmi ~ age, dat, weight=ipw3, subset=tested==1))
-out[out$assoc=="ab"&out$model==3,"beta"] <- coefficients(mod5)["age","Estimate"]
-out[out$assoc=="ab"&out$model==3,"se"] <- coefficients(mod5)["age","Std. Error"]
+mod <- summary(lm(bmi ~ age, dat, weight=ipw3, subset=tested==1))
+out[out$assoc=="ab"&out$model==3,c("beta","se")] <- coefficients(mod)["age",c("Estimate","Std. Error")]
 ```
 
-### Age and sex association
+#### Age and sex association
 
 ```{r age_sex}
 ggplot() + geom_errorbar(data=out[out$assoc=="as",], mapping=aes(x=as.factor(model), ymin=beta-1.96*se,    ymax=beta+1.96*se), width=0.1, size=1, color="#00BFC4") + 
 geom_point(data=out[out$assoc=="as",], mapping=aes(x=as.factor(model), y=beta), size=3, shape=21, fill="#00BFC4") + scale_x_discrete(labels=c("Linear / no interactions", "Linear / interactions",  "Nonlinear / interactions", "Unweighted", "Full sample")) + xlab("") + ylab("Value of association")
 ```
 
-### BMI and sex association
+#### BMI and sex association
 
 ```{r bmi_sex}
 ggplot() + geom_errorbar(data=out[out$assoc=="bs",], mapping=aes(x=as.factor(model), ymin=beta-1.96*se,    ymax=beta+1.96*se), width=0.1, size=1, color="#00BFC4") + 
 geom_point(data=out[out$assoc=="bs",], mapping=aes(x=as.factor(model), y=beta), size=3, shape=21, fill="#00BFC4") + scale_x_discrete(labels=c("Linear / no interactions", "Linear / interactions",  "Nonlinear / interactions", "Unweighted", "Full sample")) + xlab("") + ylab("Value of association")
 ```
 
-### BMI and age association
+#### BMI and age association
 
 ```{r bmi_age}
 ggplot() + geom_errorbar(data=out[out$assoc=="ab",], mapping=aes(x=as.factor(model), ymin=beta-1.96*se,    ymax=beta+1.96*se), width=0.1, size=1, color="#00BFC4") + 
 geom_point(data=out[out$assoc=="ab",], mapping=aes(x=as.factor(model), y=beta), size=3, shape=21, fill="#00BFC4") + scale_x_discrete(labels=c("Linear / no interactions", "Linear / interactions",  "Nonlinear / interactions", "Unweighted", "Full sample")) + xlab("") + ylab("Value of association")
 ```
 
+## Comparing weighted and unweighted associations between risk factors and testing positive
+
+The previous validation exercise suggests that the full weighting model with interactions and non-linearities performs best at recovering the full sample associations among sex, age and BMI. While this does not mean it will necessarily recover the full sample associations between risk factors and testing positive, it is a useful starting point. Below we compare the weighted risk factor associations with the unweighted associations estimated earlier.
+
+```{r}
+assoc2 <- data.frame(matrix(nrow=3, ncol=3))
+names(assoc2) <- c("risk_factor", "beta", "se")
+assoc2$risk_factor <- c("sex", "age", "bmi")
+
+mod <- summary(lm(positive ~ sex, dat, weight=ipw3))
+assoc2[assoc2$risk_factor=="sex",c("beta","se")] <-  coefficients(mod)["sex",c("Estimate","Std. Error")]
+
+mod <- summary(lm(positive ~ age, dat, weight=ipw3))
+assoc2[assoc2$risk_factor=="age",c("beta","se")] <-  coefficients(mod)["age",c("Estimate","Std. Error")]
+
+mod <- summary(lm(positive ~ bmi, dat, weight=ipw3))
+assoc2[assoc2$risk_factor=="bmi",c("beta","se")] <-  coefficients(mod)["bmi",c("Estimate","Std. Error")]
+
+assoc <- rbind(assoc, assoc2)
+assoc$model <- c(rep(1,3),rep(2,3))
+
+ggplot(assoc, aes(risk_factor, beta)) +
+  geom_errorbar(
+    aes(ymin = beta-1.96*se, 
+        ymax = beta+1.96*se, 
+        color = as.factor(model)),
+    position = position_dodge(0.3), size=1, width=0.1
+  ) +
+  xlab("") + ylab("Value of association") +
+  geom_point(aes(color = as.factor(model)), size=3, position = position_dodge(0.3)) +
+  geom_hline(yintercept=0, linetype="dashed", color = "#575863") +
+  labs(colour="") + 
+  scale_color_manual(name="Estimates", labels=c("Unweighted", "Weighted"), values=c("#F8766D","#00BFC4")) +
+  coord_flip()
+```
+
+The weighted and unweighted associations are very similar. This could be indicative of no collider bias, however, it is more likely in this instance that the weights are misspecified due to the absence of the positive test variable. Below we explore sensitivity analyses for this misspecification.
 
 ## Sensitivity analyses for non-nested samples
 
 We now present two sensitivity analyses which can be used when direct estimation of the probability weights is limited or not possible. Zhao et al (2019) is most appropriately used when probability weights can be estimated but are likely to be misspecified (e.g. missing an important predictor). Tudball et al (2020) is most appropriately used when weights cannot be estimated but there is external information on the target population (e.g. survey response rate, population means). 
 
-We will attempt to estimate average BMI in the full UK Biobank population using data on the tested sub-sample. The tested sub-sample's average BMI is around 1 unit higher than the full sample.
-
-```{r bmi_mean}
-dattest <- dat[dat$tested==1,]
-
-rbind(
-  tibble(
-    sample="full sample", 
-    mean=round(mean(dat$bmi),2), 
-    ci_lower=round(mean(dat$bmi) - 1.96*sqrt(var(dat$bmi)/nrow(dat)),2),
-    ci_upper=round(mean(dat$bmi) + 1.96*sqrt(var(dat$bmi)/nrow(dat)
-    ),2)
-  ),
-  tibble(
-    sample="sub-sample", 
-    mean=round(mean(dattest$bmi),2), 
-    ci_lower=round(mean(dattest$bmi) - 1.96*sqrt(var(dattest$bmi)/nrow(dattest)),2),
-    ci_upper=round(mean(dattest$bmi) + 1.96*sqrt(var(dattest$bmi)/nrow(dattest)),2)
-  )
-) %>% kable
-```
+We will attempt to estimate the association between sex and testing positive in the full UK Biobank population using data on the tested sub-sample.
 
 ### @Zhao2019
 
-Suppose we only measure BMI in the tested sub-sample and not the full UK Biobank sample. Our probability weights are likely to be misspecified if we estimate them using only age and sex as covariates. The sensitivity parameter in @Zhao2019 is the largest amount that the estimated weights differ from the true weights on the odds ratio scale. Given this parameter, this method provides an interval of possible values for means and average treatment effects.
+The sensitivity parameter in @Zhao2019 is the largest amount that the estimated weights differ from the true weights on the odds ratio scale. Given this parameter, this method provides an interval of possible values for means and associations with binary exposures.
 
-We begin by calculating our misspecified weights using only BMI and sex. For illustration, we calculate the true sensitivity parameter.
+In our example, misspecification is due to not including the positive test variable in the weight model. We choose as our sensitivity parameter an odds ratio of 1.1.
 
 ```{r zhao}
-prs_mis <- as.vector(fitted.values(glm(tested ~ sex + age + age*sex, data=dat, family="binomial")))
-prs_or <- (prs2/(1-prs2))/(prs_mis/(1-prs_mis))
-Gamma <- max(1/min(prs_or),max(prs_or))
-print(paste("True sensitivity parameter: ",round(Gamma,2),sep=""))
+Gamma <- 1.1
 
-sens1 <- bootsens::extrema.md(A=dat$tested, Y=dat$bmi, X <- as.matrix(dat[,!(names(dat) %in% c("tested"))]), gamma=log(Gamma), estimand="all")
+dat$age2 <- dat$age^2; dat$bmi2 <- dat$bmi^2; dat$bmi3 <- dat$bmi^3
 
-sens1_ci <- bootsens::bootsens.md(A=dat$tested, Y=dat$bmi, X <- as.matrix(dat[,!(names(dat) %in% c("tested"))]), gamma=log(Gamma), estimand="all", parallel=F, B=500)
+dat1 <- dat[dat$sex==1,]
+sens1 <- bootsens::extrema.md(A=dat1$tested, Y=dat1$positive, X <- as.matrix(dat1[,!(names(dat1) %in% c("tested","positive"))]), gamma=log(Gamma), estimand="all")
 
-out1 <- list(beta_min=sens1[1], beta_max=sens1[2], beta_lower=sens1_ci[1], beta_upper=sens1_ci[2])
+dat0 <- dat[dat$sex==0,]
+sens0 <- bootsens::extrema.md(A=dat0$tested, Y=dat0$positive, X <- as.matrix(dat0[,!(names(dat0) %in% c("tested","positive"))]), gamma=log(Gamma), estimand="all")
+
+sens1_ci <- bootsens::bootsens.md(A=dat1$tested, Y=dat1$positive, X <- as.matrix(dat1[,!(names(dat1) %in% c("tested","positive"))]), gamma=log(Gamma), estimand="all", parallel=F, B=500)
+
+sens0_ci <- bootsens::bootsens.md(A=dat0$tested, Y=dat0$positive, X <- as.matrix(dat0[,!(names(dat0) %in% c("tested","positive"))]), gamma=log(Gamma), estimand="all", parallel=F, B=500)
+
+out1 <- list(
+  beta_min=sens1[1]-sens0[2], 
+  beta_max=sens1[2]-sens0[1], 
+  beta_lower=sens1_ci[1]-sens0_ci[2],
+  beta_upper=sens1_ci[2]-sens0_ci[1]
+)
 
 tibble(
     method="Zhao et al (2019)", 
@@ -334,61 +390,92 @@ tibble(
 ) %>% kable
 ```
 
-The resulting bounds, while quite wide, contain average BMI in the full UK Biobank population. One reason these bounds are so wide is because this method is non-parametric, that is, it does not restrict the way in the true weights may differ from the estimated weights. The trade-off is between precision (i.e. a tight bound) and accuracy (i.e. a bound that contains average BMI in the full UK Biobank population).
+The resulting bounds indicate that even small amounts of misspecification can lead to considerable uncertainty. The bounds themselves indicate that collider bias from positive testing could either upward bias or downward bias the association between sex and testing positive. One reason these bounds are so wide is because this method is non-parametric, that is, it does not restrict the way in the true weights may differ from the estimated weights.
 
 ### @Tudball2020
 
-Suppose we only observe the tested sub-sample. Estimating probability weights is no longer possible since we do not observe anyone who has not been tested. The two sensitivity parameters in @Tudball2020 are the smallest and largest probabilities of being tested (e.g. 1\% and 90\%). We then select a model for the probability weights as before and this method places bounds on the possible values of average BMI in the full UK Biobank population. 
+Suppose we only observe the tested sub-sample. Estimating probability weights is no longer possible since we do not observe anyone who has not been tested. The two sensitivity parameters in @Tudball2020 are the smallest and largest probabilities of being tested (e.g. 1\% and 90\%). We then select a model for the probability weights as before and this method places bounds on the possible association between sex and testing positive in the full UK Biobank population. 
 
-An advantage of this method is that we can place additional constraints on the bounds. For example, suppose we know the unconditional likelihood of being tested and the average age of UK Biobank participants. We can include these as constraints to ensure that the resulting bounds are consistent with these two population values. 
+An advantage of this method is that we can place additional constraints on the bounds. Suppose we know the unconditional likelihood of being tested and the average age and BMI of UK Biobank participants. We can include these as constraints to ensure that the resulting bounds are consistent with these population values. In reality, we may have more or fewer constraints than this.
 
-A non-parametric version of this method also exists but here we present the parametric version using a logistic model for the weights. As discussed above, the parametric version results in tighter bounds but carries the risk of misspecification of the weights.
-
-We first define the numerator and denominator of estimator. Since this is a mean, the numerator is the BMI variable and the denominator is a vector of ones. We also format the variables we wish to use in our probability weights. We select age, sex, BMI and their interactions.
+A non-parametric version of this method also exists but here we present the parametric version using a logistic model for the weights. The parametric version results in tighter bounds but carries the risk of misspecification of the weights.
 
 ```{r tudball_data}
-fT <- dattest$bmi
-gT <- rep(1,NROW(dattest))
+mean_response1 <- mean(dat$tested[dat$sex==1])
+mean_age1 <- mean(dat$age[dat$sex==1])
+mean_bmi1 <- mean(dat$bmi[dat$sex==1])
+mean_response0 <- mean(dat$tested[dat$sex==0])
+mean_age0 <- mean(dat$age[dat$sex==0])
+mean_bmi0 <- mean(dat$bmi[dat$sex==0])
+  
+dattest <- dat[complete.cases(dat), ]
 
-D <- as.data.frame(dattest[,c('age','sex','bmi')])
-D$agexsex <- D$age*D$sex
+D <- as.data.frame(dattest[,c('age','bmi','positive')])
 D$agexbmi <- D$age*D$bmi
-D$sexxbmi <- D$sex*D$bmi
-D$agexsexxbmi <- D$age*D$sex*D$bmi
+D$age2 <- D$age^2
+D$bmi2 <- D$bmi^2
 ```
 
-We then define our lower bound (a) and upper bound (b) for the probability of being tested. For illustration, we use the true values estimated from the linear model with interactions.
+We then define our lower bound as a = 0.004 and upper bound b = 0.1 for the probability of being tested, which is consistent with the lower and upper bounds of our estimated weights.
 
 ```{r tudball_bound}
-a <- min(prs2)
-b <- max(prs2)
+a <- 0.004
+b <- 0.1
 ```
 
-We also select our constraints and other options for the solver.
+We also select our constraints and other computational options.
 
 ```{r}
-mycons <- list(
-  list('resp', mean(dat$tested)),
-  list('covmean', D$sex, mean(dat$sex))
+D1 <- D[dattest$sex==1,]
+D0 <- D[dattest$sex==0,]
+
+mycons1 <- list(
+  list('resp', mean_response1),
+  list('covmean', D1[,'age'], mean_age1),
+  list('covmean', D1[,'bmi'], mean_bmi1),
+  list('direc', 'positive', '+')
+)
+
+mycons0 <- list(
+  list('resp', mean_response0),
+  list('covmean', D0[,'age'], mean_age0),
+  list('covmean', D0[,'bmi'], mean_bmi0),
+  list('direc', 'positive', '+')
 )
 
 nlopts <- list("xtol_rel"=1e-8, "ftol_rel"=1e-10, "maxeval"=-1)
 opts <- list("alpha2"=0.025, "grid_bound"=4, "grid_fine"=8, "tol"=1e-4, "maxeval"=3e2, "newton_step"=0.1)
 ```
 
-We are now ready to generate our bounds for average BMI. To do this we will use the `find_bound` function that is defined in the main repository (https://github.com/MRCIEU/ukbb-covid-collider).
+We are now ready to generate our bounds for the association between sex and testing positive. To do this we will use the `find_bound` function that is defined in the main repository (https://github.com/MRCIEU/ukbb-covid-collider).
 
 ```{r tudball_options}
 source("solve.R")
 ```
 
 ```{r tudball_calculate}
-sens2 <- find_bound(a,b,fT,gT,D,constraints=mycons,opts,nlopts)
+Y1 <- dattest$positive[dattest$sex==1]
+fT1 <- Y1
+gT1 <- rep(1,NROW(Y1))
 
-sens2_upper <- sens2$beta_max + qnorm(0.9875)*sens2$se_max
-sens2_lower <- sens2$beta_min - qnorm(0.9875)*sens2$se_min
+sens1 <- find_bound(a,b,fT1,gT1,D1,constraints=mycons1,opts,nlopts)
+sens1_upper <- sens1$beta_max + qnorm(0.9875)*sens1$se_max
+sens1_lower <- sens1$beta_min - qnorm(0.9875)*sens1$se_min
 
-out2 <- list(beta_min=sens2$beta_min, beta_max=sens2$beta_max, beta_lower=sens2_lower, beta_upper=sens2_upper)
+Y0 <- dattest$positive[dattest$sex==0]
+fT0 <- Y0
+gT0 <- rep(1,NROW(Y0))
+
+sens0 <- find_bound(a,b,fT0,gT0,D0,constraints=mycons0,opts,nlopts)
+sens0_upper <- sens0$beta_max + qnorm(0.9875)*sens0$se_max
+sens0_lower <- sens0$beta_min - qnorm(0.9875)*sens0$se_min
+
+out2 <- list(
+  beta_min=sens1$beta_min-sens0$beta_max, 
+  beta_max=sens1$beta_max-sens0$beta_min, 
+  beta_lower=sens1_lower-sens0_upper,
+  beta_upper=sens1_upper-sens0_lower
+)
 
 tibble(
   method="Tudball et al (2020)", 
@@ -399,17 +486,14 @@ tibble(
   ) %>% kable
 ```
 
-As we can see, this method produces an informative bound for average BMI in the full sample.
-
 ## Summary
 
-Here we have shown that inverse probability weighting is able to recover sample-wide associations between BMI, age and sex within the non-random covid-tested subset. We also show that if the data is non-nested, in that a model cannot be fitted to predict participation, then summary data from a reference population can be used to generate adjusted estimates within the selected sample.
+Here we have walked through a realistic example of estimating risk factors for testing positive for Covid-19 in UK Biobank. As a validation exercise, we have shown that inverse probability weighting is able to recover sample-wide associations between BMI, age and sex within the non-random sub-sample of individuals who have been tested for Covid-19. We also show that if the data is non-nested, in that a model cannot be fitted to predict participation, then summary data from a reference population can be used to generate adjusted estimates within the selected sample.
 
 In general practice, there are a few things to further consider. 
 
 - We only used BMI, age and sex to develop weights here. In principle one would actually use as many variables as is necessary (even if they are not the exact variables being analysed) to build the model for sample selection.
 - There is likely to be a change in selection pressure over time, so it is important to use weights that are relevant to the timings of the variables being recorded
 - Third, in the UK Biobank the reality is slightly more complicated than has been presented here, in that the samples in the overall UK Biobank are themselves non-random (and not representative of the general population) [@Munafo2018-fv]. 
-- In practice an outcome of interest might be COVID test positive vs test negative. In this case, we only have test results in the subset, so we cannot treat it as a nested sample unless we assume that our selection model captures the influence of testing positive on being included in the sample. Therefore, performing the non-nested sensitivity analyses would be important.
 
 ## References
