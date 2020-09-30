@@ -160,7 +160,7 @@ mod6 <- glm(tested ~ bmi + age + sex + bmi * age + bmi * sex + age * sex + age *
 coefficients(summary(mod6)) %>% kable
 ```
 
-Curiously, the marginal BMI effect appears to be captured by interaction terms only. Centering the marginal variables may be more appropriate when estimating interactions.
+Curiously, the marginal BMI effect appears to be captured by interaction terms only. Centering the marginal variables may be more appropriate when estimating interactions, as otherwise the interaction term is simply a multiplicative effect which is correlated to the marginal effects.
 
 ```{r}
 dat$bmixage <- scale(dat$bmi) * scale(dat$age)
