@@ -2,11 +2,11 @@
 title: UK Biobank example of collider bias in Covid-19 test data
 bibliography: library.bib
 output:
+  pdf_document:
+    toc: true
   html_document:
     toc: true
     toc_float: true
-  pdf_document:
-    toc: true
 ---
 
 ## About this document
@@ -36,7 +36,7 @@ suppressMessages(suppressPackageStartupMessages({
   library(knitr)
   library(dplyr)
   library(ggplot2)
-  library(bootsens)
+  library(selectioninterval)
 }))
 
 knitr::opts_chunk$set(warning=FALSE, message=FALSE, echo=TRUE, cache=TRUE)
@@ -351,140 +351,60 @@ The weighted and unweighted associations are very similar. This could be indicat
 
 ## Sensitivity analyses for non-nested samples
 
-We now present two sensitivity analyses which can be used when direct estimation of the probability weights is limited or not possible. Zhao et al (2019) is most appropriately used when probability weights can be estimated but are likely to be misspecified (e.g. missing an important predictor). Tudball et al (2020) is most appropriately used when weights cannot be estimated but there is external information on the target population (e.g. survey response rate, population means). 
+We now present a sensitivity analysis which can be used when direct estimation of the probability weights is limited or not possible. @Tudball2021 is most appropriately used when weights cannot be estimated but there is external information on the target population (e.g. survey response rate, population means). 
 
-We will attempt to estimate the association between sex and testing positive in the full UK Biobank population using data on the tested sub-sample.
+### @Tudball2021
 
-### @Zhao2019
-
-The sensitivity parameter in @Zhao2019 is the largest amount that the estimated weights differ from the true weights on the odds ratio scale. Given this parameter, this method provides an interval of possible values for means and associations with binary exposures.
-
-In our example, misspecification is due to not including the positive test variable in the weight model. We choose as our sensitivity parameter an odds ratio of 1.1.
-
-```{r zhao}
-Gamma <- 1.1
-
-dat$age2 <- dat$age^2; dat$bmi2 <- dat$bmi^2; dat$bmi3 <- dat$bmi^3
-
-dat1 <- dat[dat$sex==1,]
-sens1 <- bootsens::extrema.md(A=dat1$tested, Y=dat1$positive, X <- as.matrix(dat1[,!(names(dat1) %in% c("tested","positive"))]), gamma=log(Gamma), estimand="all")
-
-dat0 <- dat[dat$sex==0,]
-sens0 <- bootsens::extrema.md(A=dat0$tested, Y=dat0$positive, X <- as.matrix(dat0[,!(names(dat0) %in% c("tested","positive"))]), gamma=log(Gamma), estimand="all")
-
-sens1_ci <- bootsens::bootsens.md(A=dat1$tested, Y=dat1$positive, X <- as.matrix(dat1[,!(names(dat1) %in% c("tested","positive"))]), gamma=log(Gamma), estimand="all", parallel=F, B=500)
-
-sens0_ci <- bootsens::bootsens.md(A=dat0$tested, Y=dat0$positive, X <- as.matrix(dat0[,!(names(dat0) %in% c("tested","positive"))]), gamma=log(Gamma), estimand="all", parallel=F, B=500)
-
-out1 <- list(
-  beta_min=sens1[1]-sens0[2], 
-  beta_max=sens1[2]-sens0[1], 
-  beta_lower=sens1_ci[1]-sens0_ci[2],
-  beta_upper=sens1_ci[2]-sens0_ci[1]
-)
-
-tibble(
-    method="Zhao et al (2019)", 
-    lower_ci=round(out1$beta_lower,2), 
-    lower_bound=round(out1$beta_min,2),
-    upper_bound=round(out1$beta_max,2),
-    upper_ci=round(out1$beta_upper,2)
-) %>% kable
-```
-
-The resulting bounds indicate that even small amounts of misspecification can lead to considerable uncertainty. The bounds themselves indicate that collider bias from positive testing could either upward bias or downward bias the association between sex and testing positive. One reason these bounds are so wide is because this method is non-parametric, that is, it does not restrict the way in the true weights may differ from the estimated weights.
-
-### @Tudball2020
-
-Suppose we only observe the tested sub-sample. Estimating probability weights is no longer possible since we do not observe anyone who has not been tested. The two sensitivity parameters in @Tudball2020 are the smallest and largest probabilities of being tested (e.g. 1\% and 90\%). We then select a model for the probability weights as before and this method places bounds on the possible association between sex and testing positive in the full UK Biobank population. 
+Suppose we only observe the tested sub-sample. Estimating probability weights is no longer possible since we do not observe anyone who has not been tested. @Tudball2021 allows us to propose a logistic model for the probability weights, comprised of variables measured in the tested sub-sample. There are three sensitivity parameters: 1) a lower bound for the average probability of sample selection; 2) an upper bound for the average probability of sample selection; and 3) the change in odds of sample selection for a one standard deviation increase in each variable.
 
 An advantage of this method is that we can place additional constraints on the bounds. Suppose we know the unconditional likelihood of being tested and the average age and BMI of UK Biobank participants. We can include these as constraints to ensure that the resulting bounds are consistent with these population values. In reality, we may have more or fewer constraints than this.
 
-A non-parametric version of this method also exists but here we present the parametric version using a logistic model for the weights. The parametric version results in tighter bounds but carries the risk of misspecification of the weights.
-
 ```{r tudball_data}
-mean_response1 <- mean(dat$tested[dat$sex==1])
-mean_age1 <- mean(dat$age[dat$sex==1])
-mean_bmi1 <- mean(dat$bmi[dat$sex==1])
-mean_response0 <- mean(dat$tested[dat$sex==0])
-mean_age0 <- mean(dat$age[dat$sex==0])
-mean_bmi0 <- mean(dat$bmi[dat$sex==0])
-  
 dattest <- dat[complete.cases(dat), ]
+dattest$bmi <- ifelse(dattest$bmi > 45, 45, dattest$bmi)
 
-D <- as.data.frame(dattest[,c('age','bmi','positive')])
-D$agexbmi <- D$age*D$bmi
-D$age2 <- D$age^2
-D$bmi2 <- D$bmi^2
+w <- as.data.frame(dattest[,(colnames(dattest) %in% c('age','sex','bmi','positive'))])
+w$age2 <- w$age^2
+w$bmi2 <- w$bmi^2
+w$int <- w$bmi*w$positive
 ```
 
-We then define our lower bound as a = 0.004 and upper bound b = 0.1 for the probability of being tested, which is consistent with the lower and upper bounds of our estimated weights.
+We then define our sensitivity parameters. These imply that the average individual in the sample has between a 1\% and 50\% probability of sample selection. Furthermore, a standard deviation increase in each variable in the weight model can change the odds of sample selection between 1/3 and 3.
 
 ```{r tudball_bound}
-a <- 0.004
-b <- 0.1
+p <- c(0.01, 0.5, 3)
 ```
 
-We also select our constraints and other computational options.
+We also select our additional constraints. We choose the response rate of the tested sub-sample, as well as the average age, sex and BMI in the full UK Biobank sample. We also ensure that being positive for Covid-19 increases one's likelihood of being tested.
 
 ```{r}
-D1 <- D[dattest$sex==1,]
-D0 <- D[dattest$sex==0,]
-
-mycons1 <- list(
-  list('resp', mean_response1),
-  list('covmean', D1[,'age'], mean_age1),
-  list('covmean', D1[,'bmi'], mean_bmi1),
-  list('direc', 'positive', '+')
+mycons <- list(
+  list('RESP', mean(dat$tested)),
+  list('COVMEAN', w$age, mean(dat$age)),
+  list('COVMEAN', w$bmi, mean(dat$bmi)),
+  list('COVMEAN', w$sex, mean(dat$sex)),
+  list('DIREC', 4, '+')
 )
-
-mycons0 <- list(
-  list('resp', mean_response0),
-  list('covmean', D0[,'age'], mean_age0),
-  list('covmean', D0[,'bmi'], mean_bmi0),
-  list('direc', 'positive', '+')
-)
-
-nlopts <- list("xtol_rel"=1e-8, "ftol_rel"=1e-10, "maxeval"=-1)
-opts <- list("alpha2"=0.025, "grid_bound"=4, "grid_fine"=8, "tol"=1e-4, "maxeval"=3e2, "newton_step"=0.1)
 ```
 
-We are now ready to generate our bounds for the association between sex and testing positive. To do this we will use the `find_bound` function that is defined in the main repository (https://github.com/MRCIEU/ukbb-covid-collider).
-
-```{r tudball_options}
-source("solve.R")
-```
+We are now ready to generate our bounds for the association between BMI and testing positive. To do this we will use the package `selectioninterval` available at https://github.com/matt-tudball/selectioninterval.
 
 ```{r tudball_calculate}
-Y1 <- dattest$positive[dattest$sex==1]
-fT1 <- Y1
-gT1 <- rep(1,NROW(Y1))
-
-sens1 <- find_bound(a,b,fT1,gT1,D1,constraints=mycons1,opts,nlopts)
-sens1_upper <- sens1$beta_max + qnorm(0.9875)*sens1$se_max
-sens1_lower <- sens1$beta_min - qnorm(0.9875)*sens1$se_min
-
-Y0 <- dattest$positive[dattest$sex==0]
-fT0 <- Y0
-gT0 <- rep(1,NROW(Y0))
-
-sens0 <- find_bound(a,b,fT0,gT0,D0,constraints=mycons0,opts,nlopts)
-sens0_upper <- sens0$beta_max + qnorm(0.9875)*sens0$se_max
-sens0_lower <- sens0$beta_min - qnorm(0.9875)*sens0$se_min
-
-out2 <- list(
-  beta_min=sens1$beta_min-sens0$beta_max, 
-  beta_max=sens1$beta_max-sens0$beta_min, 
-  beta_lower=sens1_lower-sens0_upper,
-  beta_upper=sens1_upper-sens0_lower
-)
+out <- selectioninterval::selection_bound(
+        y=dattest$positive, 
+        x=dattest$bmi, 
+        w=w, 
+        L0l=p[1], 
+        L0u=p[2], 
+        L1=p[3], 
+        cons=mycons)
 
 tibble(
-  method="Tudball et al (2020)", 
-  lower_ci=round(out2$beta_lower,2), 
-  lower_bound=round(out2$beta_min,2),
-  upper_bound=round(out2$beta_max,2),
-  upper_ci=round(out2$beta_upper,2)
+  method="Tudball et al (2021)", 
+  lower_ci=round(out$ci[1],3), 
+  lower_bound=round(out$interval[1],3),
+  upper_bound=round(out$interval[2],3),
+  upper_ci=round(out$ci[2],3)
   ) %>% kable
 ```
 
