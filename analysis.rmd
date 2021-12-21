@@ -351,7 +351,7 @@ The weighted and unweighted associations are very similar. This could be indicat
 
 ## Sensitivity analyses for non-nested samples
 
-We now present a sensitivity analysis which can be used when direct estimation of the probability weights is limited or not possible. @Tudball2021 is most appropriately used when weights cannot be estimated but there is external information on the target population (e.g. survey response rate, population means). 
+We now present a sensitivity analysis which can be used when direct estimation of the probability weights is limited or not possible. @Tudball2021 is most appropriately used when weights cannot be estimated but there is external information on the target population (e.g. survey response rate, population means). We consider the example of the association between BMI and test positivity.
 
 ### @Tudball2021
 
